@@ -17,9 +17,11 @@ import java.time.Duration;
 @RestController
 @RequestMapping("/worker")
 public class WorkerController {
-    @PostMapping("/")
+    @PostMapping()
     public Mono<RequestResult> handleWorkRequest(@RequestBody Request req) {
         log.debug("in HandleWorkRequest");
-        return Mono.just(new RequestResult("OK")).delayElement(Duration.ofSeconds(2));
+        return Mono
+                .just(new RequestResult("OK"))
+                .delayElement(Duration.ofSeconds(2));
     }
 }

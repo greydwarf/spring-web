@@ -30,7 +30,8 @@ class RequestServiceTest {
         mockWebServer = new MockWebServer();
 
         properties = new SpringWebProperties();
-        properties.setBaseUrl(mockWebServer.url("/").url().toString());
+        properties.setArchiveBaseUrl(mockWebServer.url("/").url().toString());
+        properties.setParamBaseUrl(mockWebServer.url("/").url().toString());
 
         service = new RequestService(properties);
     }
@@ -52,7 +53,7 @@ class RequestServiceTest {
 
         assertEquals(requestResult, ret);
         assertThat(webRequest.getMethod()).isEqualTo("POST");
-        assertThat(webRequest.getPath()).isEqualTo("/worker/");
+        assertThat(webRequest.getPath()).isEqualTo("/worker");
     }
 
     // If the worker client returns a status code 500, so should we
@@ -71,7 +72,7 @@ class RequestServiceTest {
         RecordedRequest webRequest = mockWebServer.takeRequest();
 
         assertThat(webRequest.getMethod()).isEqualTo("POST");
-        assertThat(webRequest.getPath()).isEqualTo("/worker/");
+        assertThat(webRequest.getPath()).isEqualTo("/worker");
     }
 
     // If the worker client returns a status code 4xx, we return "error"
@@ -88,14 +89,14 @@ class RequestServiceTest {
         RecordedRequest webRequest = mockWebServer.takeRequest();
 
         assertThat(webRequest.getMethod()).isEqualTo("POST");
-        assertThat(webRequest.getPath()).isEqualTo("/worker/");
+        assertThat(webRequest.getPath()).isEqualTo("/worker");
         assertNotNull(result);
         assertEquals("ERROR", result.getStatus());
     }
     @Test
     void callbackMakesCorrectRequest() throws InterruptedException, JsonProcessingException {
         final var initialExpected = new RequestResult("In process");
-        final var workerRequest = new Request(properties.getBaseUrl() + "callback");
+        final var workerRequest = new Request(properties.getArchiveBaseUrl() + "/callback");
         final var workerResultSent = new RequestResult("OK");
         mockWebServer.enqueue(
                 new MockResponse().setResponseCode(200)
@@ -109,13 +110,24 @@ class RequestServiceTest {
                         .setBody(mapper.writeValueAsString(workerResultSent))
         );
 
+        mockWebServer.enqueue(
+                new MockResponse().setResponseCode(200)
+                        .setHeader(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_JSON_VALUE)
+                        .setBody(mapper.writeValueAsString(workerResultSent))
+        );
+
         final var initialRet = service.scheduleWork(workerRequest).block();
         assertEquals(initialExpected, initialRet);
 
         RecordedRequest recordedWorkerRequest = mockWebServer.takeRequest();
         assertThat(recordedWorkerRequest.getMethod()).isEqualTo("POST");
-        assertThat(recordedWorkerRequest.getPath()).isEqualTo("/worker/");
+        assertThat(recordedWorkerRequest.getPath()).isEqualTo("/worker");
         assertEquals(mapper.writeValueAsString(workerRequest), recordedWorkerRequest.getBody().readUtf8());
+
+        RecordedRequest archiveResult = mockWebServer.takeRequest();
+        assertThat(archiveResult.getMethod()).isEqualTo("POST");
+        assertThat(archiveResult.getPath()).isEqualTo("/archive");
+        assertEquals(mapper.writeValueAsString(workerResultSent), archiveResult.getBody().readUtf8());
 
         RecordedRequest callbackResult = mockWebServer.takeRequest();
         assertThat(callbackResult.getMethod()).isEqualTo("POST");
@@ -127,10 +139,16 @@ class RequestServiceTest {
     @Test
     void callbackHandles500FromWorker() throws InterruptedException, JsonProcessingException {
         final var initialExpected = new RequestResult("In process");
-        final var workerRequest = new Request(properties.getBaseUrl() + "callback");
+        final var workerRequest = new Request(properties.getArchiveBaseUrl() + "callback");
         final var workerResultSent = new RequestResult("ERROR");
         mockWebServer.enqueue(
                 new MockResponse().setResponseCode(500)
+                        .setHeader(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_JSON_VALUE)
+                        .setBody(mapper.writeValueAsString(workerResultSent))
+        );
+
+        mockWebServer.enqueue(
+                new MockResponse().setResponseCode(200)
                         .setHeader(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_JSON_VALUE)
                         .setBody(mapper.writeValueAsString(workerResultSent))
         );
@@ -146,8 +164,13 @@ class RequestServiceTest {
 
         RecordedRequest recordedWorkerRequest = mockWebServer.takeRequest();
         assertThat(recordedWorkerRequest.getMethod()).isEqualTo("POST");
-        assertThat(recordedWorkerRequest.getPath()).isEqualTo("/worker/");
+        assertThat(recordedWorkerRequest.getPath()).isEqualTo("/worker");
         assertEquals(mapper.writeValueAsString(workerRequest), recordedWorkerRequest.getBody().readUtf8());
+
+        RecordedRequest archiveResult = mockWebServer.takeRequest();
+        assertThat(archiveResult.getMethod()).isEqualTo("POST");
+        assertThat(archiveResult.getPath()).isEqualTo("/archive");
+        assertEquals(mapper.writeValueAsString(workerResultSent), archiveResult.getBody().readUtf8());
 
         RecordedRequest callbackResult = mockWebServer.takeRequest();
         assertThat(callbackResult.getMethod()).isEqualTo("POST");
@@ -159,7 +182,7 @@ class RequestServiceTest {
     @Test
     void callbackHandles4xxFromWorker() throws InterruptedException, JsonProcessingException {
         final var initialExpected = new RequestResult("In process");
-        final var workerRequest = new Request(properties.getBaseUrl() + "callback");
+        final var workerRequest = new Request(properties.getArchiveBaseUrl() + "callback");
         final var workerResultSent = new RequestResult("ERROR");
         mockWebServer.enqueue(
                 new MockResponse().setResponseCode(401)
@@ -173,13 +196,24 @@ class RequestServiceTest {
                         .setBody(mapper.writeValueAsString(workerResultSent))
         );
 
+        mockWebServer.enqueue(
+                new MockResponse().setResponseCode(200)
+                        .setHeader(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_JSON_VALUE)
+                        .setBody(mapper.writeValueAsString(workerResultSent))
+        );
+
         final var initialRet = service.scheduleWork(workerRequest).block();
         assertEquals(initialExpected, initialRet);
 
         RecordedRequest recordedWorkerRequest = mockWebServer.takeRequest();
         assertThat(recordedWorkerRequest.getMethod()).isEqualTo("POST");
-        assertThat(recordedWorkerRequest.getPath()).isEqualTo("/worker/");
+        assertThat(recordedWorkerRequest.getPath()).isEqualTo("/worker");
         assertEquals(mapper.writeValueAsString(workerRequest), recordedWorkerRequest.getBody().readUtf8());
+
+        RecordedRequest archiveResult = mockWebServer.takeRequest();
+        assertThat(archiveResult.getMethod()).isEqualTo("POST");
+        assertThat(archiveResult.getPath()).isEqualTo("/archive");
+        assertEquals(mapper.writeValueAsString(workerResultSent), archiveResult.getBody().readUtf8());
 
         RecordedRequest callbackResult = mockWebServer.takeRequest();
         assertThat(callbackResult.getMethod()).isEqualTo("POST");
@@ -188,10 +222,16 @@ class RequestServiceTest {
     }
 
     @Test
-    void callbackHandles4xxFromCallback() throws InterruptedException, JsonProcessingException {
+    void callbackHandles500FromCallback() throws InterruptedException, JsonProcessingException {
         final var initialExpected = new RequestResult("In process");
-        final var workerRequest = new Request(properties.getBaseUrl() + "callback");
+        final var workerRequest = new Request(properties.getArchiveBaseUrl() + "callback");
         final var workerResultSent = new RequestResult("OK");
+        mockWebServer.enqueue(
+                new MockResponse().setResponseCode(200)
+                        .setHeader(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_JSON_VALUE)
+                        .setBody(mapper.writeValueAsString(workerResultSent))
+        );
+
         mockWebServer.enqueue(
                 new MockResponse().setResponseCode(200)
                         .setHeader(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_JSON_VALUE)
@@ -209,8 +249,55 @@ class RequestServiceTest {
 
         RecordedRequest recordedWorkerRequest = mockWebServer.takeRequest();
         assertThat(recordedWorkerRequest.getMethod()).isEqualTo("POST");
-        assertThat(recordedWorkerRequest.getPath()).isEqualTo("/worker/");
+        assertThat(recordedWorkerRequest.getPath()).isEqualTo("/worker");
         assertEquals(mapper.writeValueAsString(workerRequest), recordedWorkerRequest.getBody().readUtf8());
+
+        RecordedRequest archiveResult = mockWebServer.takeRequest();
+        assertThat(archiveResult.getMethod()).isEqualTo("POST");
+        assertThat(archiveResult.getPath()).isEqualTo("/archive");
+        assertEquals(mapper.writeValueAsString(workerResultSent), archiveResult.getBody().readUtf8());
+
+        RecordedRequest callbackResult = mockWebServer.takeRequest();
+        assertThat(callbackResult.getMethod()).isEqualTo("POST");
+        assertThat(callbackResult.getPath()).isEqualTo("/callback");
+        assertEquals(mapper.writeValueAsString(workerResultSent), callbackResult.getBody().readUtf8());
+    }
+
+    @Test
+    void callbackHandles4xxFromCallback() throws InterruptedException, JsonProcessingException {
+        final var initialExpected = new RequestResult("In process");
+        final var workerRequest = new Request(properties.getArchiveBaseUrl() + "callback");
+        final var workerResultSent = new RequestResult("OK");
+        mockWebServer.enqueue(
+                new MockResponse().setResponseCode(200)
+                        .setHeader(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_JSON_VALUE)
+                        .setBody(mapper.writeValueAsString(workerResultSent))
+        );
+
+        mockWebServer.enqueue(
+                new MockResponse().setResponseCode(200)
+                        .setHeader(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_JSON_VALUE)
+                        .setBody(mapper.writeValueAsString(workerResultSent))
+        );
+
+        mockWebServer.enqueue(
+                new MockResponse().setResponseCode(401)
+                        .setHeader(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_JSON_VALUE)
+                        .setBody(mapper.writeValueAsString(workerResultSent))
+        );
+
+        final var initialRet = service.scheduleWork(workerRequest).block();
+        assertEquals(initialExpected, initialRet);
+
+        RecordedRequest recordedWorkerRequest = mockWebServer.takeRequest();
+        assertThat(recordedWorkerRequest.getMethod()).isEqualTo("POST");
+        assertThat(recordedWorkerRequest.getPath()).isEqualTo("/worker");
+        assertEquals(mapper.writeValueAsString(workerRequest), recordedWorkerRequest.getBody().readUtf8());
+
+        RecordedRequest archiveResult = mockWebServer.takeRequest();
+        assertThat(archiveResult.getMethod()).isEqualTo("POST");
+        assertThat(archiveResult.getPath()).isEqualTo("/archive");
+        assertEquals(mapper.writeValueAsString(workerResultSent), archiveResult.getBody().readUtf8());
 
         RecordedRequest callbackResult = mockWebServer.takeRequest();
         assertThat(callbackResult.getMethod()).isEqualTo("POST");

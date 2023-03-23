@@ -8,6 +8,7 @@ import org.springframework.context.annotation.Configuration;
 @Configuration
 @ConfigurationProperties(prefix = "spring-web")
 public class SpringWebProperties {
-    private String baseUrl;
+    private String paramBaseUrl;
+    private String archiveBaseUrl;
 
 }
